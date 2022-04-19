@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from matplotlib import pyplot as plt
 import torch.cuda as cuda
-from random import randint
+from random import randint, shuffle
 
 SEQ_LEN = 6
 VOCAB = len(ab)
@@ -67,7 +67,7 @@ class Gen(nn.Module):
         self.softmax = nn.Softmax(dim=1)
     
     def forward(self, inp):
-        y, h = self.rnn(inp)
+        y, _ = self.rnn(inp)
         y = flatten(y[:, -1, :], start_dim=1)
         y = self.softmax(y)
         
@@ -87,6 +87,9 @@ if __name__ == "__main__":
     losses = []
     accuracies = []
     
+    test_losses = []
+    test_accuracies = []
+    
     lossFcn = nn.BCELoss(reduction='mean')
     opt = optim.Adam(g.parameters(), lr=0.001)
     
@@ -95,19 +98,20 @@ if __name__ == "__main__":
     
     with open("GBPN.csv", "r") as f:
         lines = f.readlines()
+        lines = [line for line in lines if "wales" not in line.lower() and "scotland" not in line.lower()]
         names = list(set([line.split(",")[1].upper().replace("&", "AND") for line in lines]))
         names = [name for name in names if all([letter in ab for letter in name]) and len(name) < 33]
-        #print(names)
+        
+    print(f"Trimmed dataset size: {len(names)}")
     
     names = ["$"*SEQ_LEN + name + "£" for name in names]
-    #names = [name + " "*(32 - len(name)) for name in names]
     
-    names_str = "".join(names)
-    total_letters = len(names_str)
-    letter_freqs = {letter: sum([1 for x in names_str if x == letter])/total_letters for letter in ab if letter != "$"}
-    inv_let_freqs = {letter: 1/letter_freqs[letter] for letter in ab if letter != "$"}
+    shuffle(names)
+    
+    test_names = [names.pop() for _ in range(100)]
     
     my_names_loop = names_loop(names)
+    my_test_names_loop = names_loop(test_names)
     
     batch_inp = empty(BATCH_SIZE, SEQ_LEN, VOCAB)
     batch_labels = empty(BATCH_SIZE, VOCAB)
@@ -123,14 +127,26 @@ if __name__ == "__main__":
     while 1:
         opt.zero_grad()
         
+        if (b+1) % 50 == 0:
+            testing = True
+        else:
+            testing = False
         
         sample_index = 0
         i = 0
-        name = next(my_names_loop)
+        
+        if testing:
+            name = next(my_test_names_loop)
+        else:
+            name = next(my_names_loop)
         
         while sample_index < BATCH_SIZE:
             if name[i+SEQ_LEN-1] == "£":
-                name = next(my_names_loop)
+                if testing:
+                    name = next(my_test_names_loop)
+                else:
+                    name = next(my_names_loop)
+                    
                 i = 0
                 
             #print(name[i:i+SEQ_LEN], name[i+SEQ_LEN])
@@ -149,37 +165,35 @@ if __name__ == "__main__":
             
         #print(["".join([decode(batch_inp[i, j, :]) for j in range(SEQ_LEN)]) for i in range(BATCH_SIZE)])
         #print(batch_labels[3,:])
+        
         y = g(batch_inp)
         loss = lossFcn(y, batch_labels)
         acc = accuracy(y, batch_labels)
-        
-        #scaled_loss = empty(BATCH_SIZE)
-        
-        #for i in range(BATCH_SIZE):
-            #scaled_loss[i] = loss[i, :].mean() * inv_let_freqs[decode(batch_labels[i, :])]
-        
-        #scaled_avg_loss = scaled_loss.mean()
         
         print(f"{b} - {loss.item()} - {acc}")
         random_int = randint(0, BATCH_SIZE-1)
         print("".join([decode(batch_inp[random_int, i,:]) for i in range(SEQ_LEN)]), decode(y[random_int, :]))
         
-        #scaled_avg_loss.backward()
-        loss.backward()
-        
-        losses.append(loss.item())
-        accuracies.append(acc)
+        if not testing:
+            loss.backward()
+            losses.append(loss.item())
+            accuracies.append(acc)
+            opt.step()
+        else:
+            test_losses.append(loss.item())
+            test_accuracies.append(acc)
+            
         b += 1
-        opt.step()
         
         if ((b+1) % 100) == 0:
             print()
-            print(">>>TEST>>>>  " + test(g)[3:])
+            print(">>>SAMPLE OUTPUT>>>>  " + test(g)[3:])
             print()
             
-            
             ax1.plot(losses)
+            ax1.scatter(range(50, (len(test_losses)+1)*50, 50), test_losses)
             ax2.plot(accuracies)
+            ax2.scatter(range(50, (len(test_accuracies)+1)*50, 50), test_accuracies)
             plt.draw()
             plt.pause(0.001)
             

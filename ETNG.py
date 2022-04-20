@@ -47,7 +47,7 @@ def accuracy(ys, labels):
     
 def test(g):
     g.eval()
-    
+    seed = randn(g.rnn.num_layers, 1, VOCAB)
     name = "$" * SEQ_LEN
     while name[-1] != "£":
         name += decode(g(encode(name[-5:-1]).unsqueeze(0).to(dev)))
@@ -67,7 +67,8 @@ class Gen(nn.Module):
         self.softmax = nn.Softmax(dim=1)
     
     def forward(self, inp):
-        y, _ = self.rnn(inp)
+        h0 = randn(self.rnn.num_layers, inp.shape[0], VOCAB)
+        y, _ = self.rnn(inp, h0)
         y = flatten(y[:, -1, :], start_dim=1)
         y = self.softmax(y)
         

@@ -216,9 +216,9 @@ if __name__ == "__main__":
             print()
             
             ax1.plot(losses)
-            ax1.scatter(range(50, (len(test_losses)+1)*50, 50), test_losses)
+            ax1.scatter(range(50, (len(test_losses)+1)*50, 50), test_losses, marker="x")
             ax2.plot(accuracies)
-            ax2.scatter(range(50, (len(test_accuracies)+1)*50, 50), test_accuracies)
+            ax2.scatter(range(50, (len(test_accuracies)+1)*50, 50), test_accuracies, marker="x")
             plt.draw()
             plt.pause(0.001)
             
